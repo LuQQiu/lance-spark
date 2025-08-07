@@ -196,7 +196,7 @@ To write vector columns, add metadata to your DataFrame schema specifying the fi
         StructField("id", LongType(), nullable=False),
         StructField("text", StringType(), nullable=True),
         StructField("embeddings", ArrayType(FloatType()), 
-                    nullable=True, metadata=metadata)
+                    nullable=False, metadata=metadata)
     ])
     
     # Create DataFrame with vector data
@@ -225,7 +225,7 @@ To write vector columns, add metadata to your DataFrame schema specifying the fi
       StructField("id", LongType, nullable = false),
       StructField("text", StringType, nullable = true),
       StructField("embeddings", ArrayType(FloatType), 
-                  nullable = true, metadata)
+                  nullable = false, metadata)
     ))
     
     // Create DataFrame with vector data
@@ -255,7 +255,7 @@ To write vector columns, add metadata to your DataFrame schema specifying the fi
         new StructField("id", DataTypes.LongType, false, Metadata.empty()),
         new StructField("text", DataTypes.StringType, true, Metadata.empty()),
         new StructField("embeddings", DataTypes.createArrayType(DataTypes.FloatType), 
-                        true, metadata)
+                        false, metadata)
     });
     
     // Create DataFrame with vector data
@@ -282,13 +282,19 @@ To write vector columns, add metadata to your DataFrame schema specifying the fi
 3. **Index Support**: Required for Lance vector indexing and similarity search
 4. **Storage Efficiency**: More efficient columnar compression
 
-### Dimension Validation
+### Validation
 
-The connector validates dimensions at write time. If any vector has incorrect size:
+The connector validates vector columns at write time:
 
-```
-IllegalArgumentException: Vector column 'embeddings' expected dimension 128 but got 64
-```
+1. **Null Check**: Vector columns cannot contain null values
+   ```
+   IllegalArgumentException: Vector column 'embeddings' cannot be null at row position 0
+   ```
+
+2. **Dimension Check**: All vectors must have the exact specified dimension
+   ```
+   IllegalArgumentException: Vector column 'embeddings' expected dimension 128 but got 64 at row position 5
+   ```
 
 ### Supported Types
 

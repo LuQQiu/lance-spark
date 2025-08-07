@@ -23,6 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.MetadataBuilder;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.AfterAll;
@@ -289,5 +291,74 @@ public class SparkConnectorWriteTest {
     spark.sql("CREATE OR REPLACE TABLE lance.`" + path + "` AS SELECT * FROM tmp_view");
     spark.sql("CREATE OR REPLACE TABLE lance.`" + path + "` AS SELECT * FROM tmp_view");
     spark.sql("DROP TABLE lance.`" + path + "`");
+  }
+
+  @Test
+  public void writeVectorColumns(TestInfo testInfo) throws java.io.IOException {
+    String datasetName = testInfo.getTestMethod().get().getName();
+
+    // Create schema with vector column metadata
+    int dimension = 128;
+    Metadata metadata =
+        new MetadataBuilder().putLong("arrow.FixedSizeList.size", dimension).build();
+
+    StructType schema =
+        new StructType(
+            new StructField[] {
+              new StructField("id", DataTypes.LongType, false, Metadata.empty()),
+              new StructField("text", DataTypes.StringType, true, Metadata.empty()),
+              new StructField(
+                  "embeddings",
+                  DataTypes.createArrayType(DataTypes.FloatType, false),
+                  false,
+                  metadata)
+            });
+
+    // Create 256 rows of test data
+    List<Row> data = new java.util.ArrayList<>();
+    for (int i = 0; i < 256; i++) {
+      float[] vector = new float[dimension];
+      for (int j = 0; j < dimension; j++) {
+        vector[j] = i / 256.0f + j * 0.001f;
+      }
+      data.add(RowFactory.create((long) i, "document_" + i, vector));
+    }
+
+    Dataset<Row> df = spark.createDataFrame(data, schema);
+
+    // Write to Lance format
+    df.write()
+        .format(LanceDataSource.name)
+        .option(
+            LanceConfig.CONFIG_DATASET_URI,
+            LanceConfig.getDatasetUri(dbPath.toString(), datasetName))
+        .save();
+
+    // Also write to a standalone location for external verification
+    String standaloneDatasetPath = "/tmp/vector_test.lance";
+    // Delete if exists
+    java.nio.file.Path standalonePath = java.nio.file.Paths.get(standaloneDatasetPath);
+    if (java.nio.file.Files.exists(standalonePath)) {
+      org.apache.commons.io.FileUtils.deleteDirectory(standalonePath.toFile());
+    }
+    df.write()
+        .format(LanceDataSource.name)
+        .option(LanceConfig.CONFIG_DATASET_URI, standaloneDatasetPath)
+        .save();
+
+    // Read back and verify
+    Dataset<Row> readDf =
+        spark
+            .read()
+            .format(LanceDataSource.name)
+            .option(
+                LanceConfig.CONFIG_DATASET_URI,
+                LanceConfig.getDatasetUri(dbPath.toString(), datasetName))
+            .load();
+
+    assertEquals(256, readDf.count());
+    System.out.println("Successfully written 256 rows with 128-dimensional vectors");
+    System.out.println("Vectors should be stored as FixedSizeList[128] in Arrow format");
+    System.out.println("Also written to " + standaloneDatasetPath + " for external verification");
   }
 }

@@ -26,7 +26,6 @@ import org.apache.spark.sql.types.StructType;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Validates vector columns have the correct dimensions as specified in metadata. */
 public class VectorValidator {
 
   private static final String ARROW_FIXED_SIZE_LIST_SIZE_KEY = "arrow.FixedSizeList.size";
@@ -37,29 +36,27 @@ public class VectorValidator {
     this.vectorFields = extractVectorFields(schema);
   }
 
-  /**
-   * Validates that all vector columns in the row have the correct dimensions.
-   *
-   * @param row The row to validate
-   * @throws IllegalArgumentException if any vector has incorrect dimensions
-   */
   public void validateRow(InternalRow row) {
     for (VectorFieldInfo fieldInfo : vectorFields.values()) {
-      if (!row.isNullAt(fieldInfo.ordinal)) {
-        ArrayData arrayData = row.getArray(fieldInfo.ordinal);
-        long actualDimension = arrayData.numElements();
+      if (row.isNullAt(fieldInfo.ordinal)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Vector column '%s' cannot be null at row position %d",
+                fieldInfo.name, fieldInfo.ordinal));
+      }
 
-        if (actualDimension != fieldInfo.expectedDimension) {
-          throw new IllegalArgumentException(
-              String.format(
-                  "Vector column '%s' expected dimension %d but got %d at row position %d",
-                  fieldInfo.name, fieldInfo.expectedDimension, actualDimension, fieldInfo.ordinal));
-        }
+      ArrayData arrayData = row.getArray(fieldInfo.ordinal);
+      long actualDimension = arrayData.numElements();
+
+      if (actualDimension != fieldInfo.expectedDimension) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Vector column '%s' expected dimension %d but got %d at row position %d",
+                fieldInfo.name, fieldInfo.expectedDimension, actualDimension, fieldInfo.ordinal));
       }
     }
   }
 
-  /** Checks if there are any vector fields to validate. */
   public boolean hasVectorFields() {
     return !vectorFields.isEmpty();
   }
@@ -83,7 +80,6 @@ public class VectorValidator {
     DataType dataType = field.dataType();
     Metadata metadata = field.metadata();
 
-    // Check if it's an array type with float or double elements
     if (!(dataType instanceof ArrayType)) {
       return false;
     }
@@ -91,11 +87,14 @@ public class VectorValidator {
     ArrayType arrayType = (ArrayType) dataType;
     DataType elementType = arrayType.elementType();
 
+    if (arrayType.containsNull()) {
+      return false;
+    }
+
     if (!(elementType instanceof FloatType || elementType instanceof DoubleType)) {
       return false;
     }
 
-    // Check metadata for fixed size list specification
     return metadata.contains(ARROW_FIXED_SIZE_LIST_SIZE_KEY)
         && metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY) > 0;
   }

@@ -31,7 +31,7 @@ class VectorColumnTest extends AnyFunSuite {
       StructField(
         "embeddings",
         ArrayType(FloatType, containsNull = false),
-        nullable = true,
+        nullable = false,
         metadata)))
 
     // Convert to Arrow schema
@@ -82,7 +82,7 @@ class VectorColumnTest extends AnyFunSuite {
       StructField(
         "features",
         ArrayType(DoubleType, containsNull = false),
-        nullable = true,
+        nullable = false,
         metadata)))
 
     val arrowSchema =

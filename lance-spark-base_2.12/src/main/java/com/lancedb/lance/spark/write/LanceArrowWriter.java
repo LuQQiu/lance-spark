@@ -15,7 +15,10 @@ package com.lancedb.lance.spark.write;
 
 import com.google.common.base.Preconditions;
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.arrow.ArrowWriter;
@@ -74,9 +77,35 @@ public class LanceArrowWriter extends ArrowReader {
   @Override
   public void prepareLoadNextBatch() throws IOException {
     super.prepareLoadNextBatch();
-    arrowWriter = ArrowWriter.create(this.getVectorSchemaRoot());
+    // Don't use Spark's ArrowWriter directly for FixedSizeList fields
+    // We'll handle the conversion manually
+    VectorSchemaRoot root = this.getVectorSchemaRoot();
+    arrowWriter = createCustomArrowWriter(root);
     // release batch size token for write
     writeToken.release(batchSize);
+  }
+
+  private ArrowWriter createCustomArrowWriter(VectorSchemaRoot root) {
+    // Check if any fields are FixedSizeList that need conversion
+    boolean hasFixedSizeList = false;
+    System.out.println("LanceArrowWriter.createCustomArrowWriter: Schema = " + root.getSchema());
+    for (Field field : root.getSchema().getFields()) {
+      System.out.println("  Field: " + field.getName() + ", Type: " + field.getType());
+      if (field.getType() instanceof ArrowType.FixedSizeList) {
+        hasFixedSizeList = true;
+        break;
+      }
+    }
+
+    if (hasFixedSizeList) {
+      // Use delegating writer that handles FixedSizeList conversion
+      System.out.println("Using FixedSizeListDelegatingWriter");
+      return new FixedSizeListDelegatingWriter(root);
+    } else {
+      // Use standard Spark ArrowWriter for regular types
+      System.out.println("Using standard ArrowWriter");
+      return ArrowWriter.create(root);
+    }
   }
 
   @Override
