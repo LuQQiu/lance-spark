@@ -293,7 +293,5 @@ IllegalArgumentException: Vector column 'embeddings' expected dimension 128 but 
 ### Supported Types
 
 FixedSizeList conversion works with:
-- `FloatType` (most common for embeddings)
-- `DoubleType` (higher precision)
-- `IntegerType`
-- `LongType`
+- `FloatType` (float32 - most common for embeddings)
+- `DoubleType` (float64 - higher precision vectors)

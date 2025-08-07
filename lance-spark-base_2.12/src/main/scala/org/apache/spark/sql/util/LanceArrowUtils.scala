@@ -77,8 +77,7 @@ object LanceArrowUtils {
     metadata != null &&
     metadata.contains(ARROW_FIXED_SIZE_LIST_SIZE_KEY) &&
     metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY) > 0 &&
-    (elementType == FloatType || elementType == DoubleType ||
-      elementType == IntegerType || elementType == LongType) // Support more types
+    (elementType == FloatType || elementType == DoubleType) // Only support float32 and float64 for vectors
   }
 
   // New method that takes a StructField to preserve metadata
@@ -91,7 +90,8 @@ object LanceArrowUtils {
       case ArrayType(elementType, containsNull) =>
         // Check if this should be a FixedSizeList
         if (shouldBeFixedSizeList(field.metadata, elementType)) {
-          val listSize = field.metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY).toInt
+          val listSize =
+            field.metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY).toInt // Arrow API requires int
           val fieldType =
             new FieldType(field.nullable, new ArrowType.FixedSizeList(listSize), null)
           new Field(

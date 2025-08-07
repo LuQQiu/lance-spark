@@ -47,7 +47,7 @@ public class VectorValidator {
     for (VectorFieldInfo fieldInfo : vectorFields.values()) {
       if (!row.isNullAt(fieldInfo.ordinal)) {
         ArrayData arrayData = row.getArray(fieldInfo.ordinal);
-        int actualDimension = arrayData.numElements();
+        long actualDimension = arrayData.numElements();
 
         if (actualDimension != fieldInfo.expectedDimension) {
           throw new IllegalArgumentException(
@@ -71,7 +71,7 @@ public class VectorValidator {
     for (int i = 0; i < structFields.length; i++) {
       StructField field = structFields[i];
       if (isVectorField(field)) {
-        int dimension = getVectorDimension(field.metadata());
+        long dimension = getVectorDimension(field.metadata());
         fields.put(i, new VectorFieldInfo(field.name(), i, dimension));
       }
     }
@@ -100,16 +100,16 @@ public class VectorValidator {
         && metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY) > 0;
   }
 
-  private int getVectorDimension(Metadata metadata) {
-    return (int) metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY);
+  private long getVectorDimension(Metadata metadata) {
+    return metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY);
   }
 
   private static class VectorFieldInfo {
     final String name;
     final int ordinal;
-    final int expectedDimension;
+    final long expectedDimension;
 
-    VectorFieldInfo(String name, int ordinal, int expectedDimension) {
+    VectorFieldInfo(String name, int ordinal, long expectedDimension) {
       this.name = name;
       this.ordinal = ordinal;
       this.expectedDimension = expectedDimension;
