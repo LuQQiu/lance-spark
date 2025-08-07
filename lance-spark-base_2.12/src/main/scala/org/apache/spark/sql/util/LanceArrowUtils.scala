@@ -37,6 +37,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
 
 object LanceArrowUtils {
+
+  // Constants for Arrow FixedSizeList metadata
+  val ARROW_FIXED_SIZE_LIST_SIZE_KEY = "arrow.FixedSizeList.size"
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case int: ArrowType.Int if !int.getIsSigned && int.getBitWidth == 8 * 8 => LongType
@@ -57,13 +61,56 @@ object LanceArrowUtils {
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean = false): Schema = {
     new Schema(schema.map { field =>
-      toArrowField(
-        field.name,
+      // Pass the entire StructField to preserve metadata
+      toArrowFieldFromStructField(
+        field,
         deduplicateFieldNames(field.dataType, errorOnDuplicatedFieldNames),
-        field.nullable,
         timeZoneId,
         largeVarTypes)
     }.asJava)
+  }
+
+  // Helper method to check if metadata indicates this should be a FixedSizeList
+  private def shouldBeFixedSizeList(
+      metadata: org.apache.spark.sql.types.Metadata,
+      elementType: DataType): Boolean = {
+    metadata != null &&
+    metadata.contains(ARROW_FIXED_SIZE_LIST_SIZE_KEY) &&
+    metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY) > 0 &&
+    (elementType == FloatType || elementType == DoubleType ||
+      elementType == IntegerType || elementType == LongType) // Support more types
+  }
+
+  // New method that takes a StructField to preserve metadata
+  def toArrowFieldFromStructField(
+      field: StructField,
+      dedupedDataType: DataType,
+      timeZoneId: String,
+      largeVarTypes: Boolean = false): Field = {
+    dedupedDataType match {
+      case ArrayType(elementType, containsNull) =>
+        // Check if this should be a FixedSizeList
+        if (shouldBeFixedSizeList(field.metadata, elementType)) {
+          val listSize = field.metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY).toInt
+          val fieldType =
+            new FieldType(field.nullable, new ArrowType.FixedSizeList(listSize), null)
+          new Field(
+            field.name,
+            fieldType,
+            Seq(
+              toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
+        } else {
+          val fieldType = new FieldType(field.nullable, ArrowType.List.INSTANCE, null)
+          new Field(
+            field.name,
+            fieldType,
+            Seq(
+              toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
+        }
+      case _ =>
+        // For non-array types, use the original toArrowField method
+        toArrowField(field.name, dedupedDataType, field.nullable, timeZoneId, largeVarTypes)
+    }
   }
 
   def toArrowField(

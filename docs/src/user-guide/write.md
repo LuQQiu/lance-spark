@@ -174,3 +174,126 @@ DROP TABLE IF EXISTS users;
     // Alternative: use traditional write API with mode
     newDF.write().mode("append").saveAsTable("users");
     ```
+
+## Vector Columns (FixedSizeList)
+
+Lance supports efficient storage of vector/embedding columns using Arrow's FixedSizeList type. This is essential for machine learning applications where vectors must have consistent dimensions.
+
+### Writing Vector Columns
+
+To write vector columns, add metadata to your DataFrame schema specifying the fixed size:
+
+=== "Python"
+    ```python
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import *
+    
+    # Create metadata for 128-dimensional vectors
+    metadata = {"arrow.FixedSizeList.size": 128}
+    
+    # Define schema with vector column
+    schema = StructType([
+        StructField("id", LongType(), nullable=False),
+        StructField("text", StringType(), nullable=True),
+        StructField("embeddings", ArrayType(FloatType()), 
+                    nullable=True, metadata=metadata)
+    ])
+    
+    # Create DataFrame with vector data
+    data = [
+        (1, "first document", [0.1] * 128),
+        (2, "second document", [0.2] * 128)
+    ]
+    
+    df = spark.createDataFrame(data, schema)
+    
+    # Write to Lance - embeddings stored as FixedSizeList[128]
+    df.write.format("lance").mode("overwrite").save("vectors.lance")
+    ```
+
+=== "Scala"
+    ```scala
+    import org.apache.spark.sql.types._
+    
+    // Create metadata for 128-dimensional vectors
+    val metadata = new MetadataBuilder()
+      .putLong("arrow.FixedSizeList.size", 128)
+      .build()
+    
+    // Define schema with vector column
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("text", StringType, nullable = true),
+      StructField("embeddings", ArrayType(FloatType), 
+                  nullable = true, metadata)
+    ))
+    
+    // Create DataFrame with vector data
+    val data = Seq(
+      (1L, "first document", Array.fill(128)(0.1f)),
+      (2L, "second document", Array.fill(128)(0.2f))
+    )
+    
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(data), schema)
+    
+    // Write to Lance - embeddings stored as FixedSizeList[128]
+    df.write.format("lance").mode("overwrite").save("vectors.lance")
+    ```
+
+=== "Java"
+    ```java
+    import org.apache.spark.sql.types.*;
+    
+    // Create metadata for 128-dimensional vectors
+    Metadata metadata = new MetadataBuilder()
+        .putLong("arrow.FixedSizeList.size", 128)
+        .build();
+    
+    // Define schema with vector column
+    StructType schema = new StructType(new StructField[]{
+        new StructField("id", DataTypes.LongType, false, Metadata.empty()),
+        new StructField("text", DataTypes.StringType, true, Metadata.empty()),
+        new StructField("embeddings", DataTypes.createArrayType(DataTypes.FloatType), 
+                        true, metadata)
+    });
+    
+    // Create DataFrame with vector data
+    float[] embedding1 = new float[128];
+    float[] embedding2 = new float[128];
+    Arrays.fill(embedding1, 0.1f);
+    Arrays.fill(embedding2, 0.2f);
+    
+    List<Row> data = Arrays.asList(
+        RowFactory.create(1L, "first document", embedding1),
+        RowFactory.create(2L, "second document", embedding2)
+    );
+    
+    Dataset<Row> df = spark.createDataFrame(data, schema);
+    
+    // Write to Lance - embeddings stored as FixedSizeList[128]
+    df.write().format("lance").mode("overwrite").save("vectors.lance");
+    ```
+
+### Benefits of FixedSizeList
+
+1. **Type Safety**: Ensures all vectors have the same dimension
+2. **Performance**: Better memory layout and SIMD operations
+3. **Index Support**: Required for Lance vector indexing and similarity search
+4. **Storage Efficiency**: More efficient columnar compression
+
+### Dimension Validation
+
+The connector validates dimensions at write time. If any vector has incorrect size:
+
+```
+IllegalArgumentException: Vector column 'embeddings' expected dimension 128 but got 64
+```
+
+### Supported Types
+
+FixedSizeList conversion works with:
+- `FloatType` (most common for embeddings)
+- `DoubleType` (higher precision)
+- `IntegerType`
+- `LongType`

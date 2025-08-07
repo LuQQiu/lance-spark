@@ -18,6 +18,7 @@ import com.lancedb.lance.WriteParams;
 import com.lancedb.lance.spark.LanceConfig;
 import com.lancedb.lance.spark.SparkOptions;
 import com.lancedb.lance.spark.internal.LanceDatasetAdapter;
+import com.lancedb.lance.spark.utils.VectorValidator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
@@ -35,18 +36,25 @@ public class LanceDataWriter implements DataWriter<InternalRow> {
   private LanceArrowWriter arrowWriter;
   private FutureTask<List<FragmentMetadata>> fragmentCreationTask;
   private Thread fragmentCreationThread;
+  private VectorValidator vectorValidator;
 
   private LanceDataWriter(
       LanceArrowWriter arrowWriter,
       FutureTask<List<FragmentMetadata>> fragmentCreationTask,
-      Thread fragmentCreationThread) {
+      Thread fragmentCreationThread,
+      VectorValidator vectorValidator) {
     this.arrowWriter = arrowWriter;
     this.fragmentCreationThread = fragmentCreationThread;
     this.fragmentCreationTask = fragmentCreationTask;
+    this.vectorValidator = vectorValidator;
   }
 
   @Override
   public void write(InternalRow record) throws IOException {
+    // Validate vector dimensions if there are vector fields
+    if (vectorValidator != null && vectorValidator.hasVectorFields()) {
+      vectorValidator.validateRow(record);
+    }
     arrowWriter.write(record);
   }
 
@@ -101,7 +109,11 @@ public class LanceDataWriter implements DataWriter<InternalRow> {
       Thread fragmentCreationThread = new Thread(fragmentCreationTask);
       fragmentCreationThread.start();
 
-      return new LanceDataWriter(arrowWriter, fragmentCreationTask, fragmentCreationThread);
+      // Create vector validator for dimension checking
+      VectorValidator vectorValidator = new VectorValidator(schema);
+
+      return new LanceDataWriter(
+          arrowWriter, fragmentCreationTask, fragmentCreationThread, vectorValidator);
     }
   }
 }
