@@ -88,10 +88,14 @@ object LanceArrowUtils {
       timeZoneId: String,
       largeVarTypes: Boolean = false,
       metadata: org.apache.spark.sql.types.Metadata = null): Field = {
+    println(s"toArrowField: name=$name, dt=$dt, metadata=$metadata")
     dt match {
       case ArrayType(elementType, containsNull) =>
-        if (shouldBeFixedSizeList(metadata, elementType, containsNull)) {
+        val shouldConvert = shouldBeFixedSizeList(metadata, elementType, containsNull)
+        println(s"  ArrayType: elementType=$elementType, containsNull=$containsNull, shouldConvert=$shouldConvert")
+        if (shouldConvert) {
           val listSize = metadata.getLong(ARROW_FIXED_SIZE_LIST_SIZE_KEY).toInt
+          println(s"  Creating FixedSizeList with size=$listSize")
           val fieldType = new FieldType(nullable, new ArrowType.FixedSizeList(listSize), null)
           new Field(
             name,

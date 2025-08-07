@@ -124,8 +124,10 @@ public class LanceDatasetAdapter {
   }
 
   public static LanceArrowWriter getArrowWriter(StructType sparkSchema, int batchSize) {
-    return new LanceArrowWriter(
-        allocator, LanceArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false), batchSize);
+    org.apache.arrow.vector.types.pojo.Schema arrowSchema =
+        LanceArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false);
+    System.out.println("LanceDatasetAdapter.getArrowWriter: Arrow schema = " + arrowSchema);
+    return new LanceArrowWriter(allocator, arrowSchema, batchSize);
   }
 
   public static List<FragmentMetadata> createFragment(
